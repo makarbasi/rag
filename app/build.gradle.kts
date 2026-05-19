@@ -1,20 +1,17 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
 android {
     namespace  = "com.qualcomm.rag"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 35
 
     defaultConfig {
         applicationId         = "com.qualcomm.rag"
-        minSdk                = 33
-        targetSdk             = 36
+        minSdk                = 26
+        targetSdk             = 35
         versionCode           = 1
         versionName           = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -35,14 +32,18 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    // Keep Kotlin's JVM target in sync with compileOptions above
+    kotlinOptions {
+        jvmTarget = "11"
+    }
+
     buildFeatures {
         compose = true
     }
 
-    // Prevent Android from compressing the large ONNX binary and tokenizer
-    // so that they can be streamed efficiently from assets.
-    androidResources {
-        noCompress += listOf("onnx", "json")
+    // Prevent Android from compressing the ONNX model and tokenizer in the APK
+    aaptOptions {
+        noCompress("onnx", "json")
     }
 
     // Allow the large ONNX model to live in assets (> 1 MB default limit lifted)

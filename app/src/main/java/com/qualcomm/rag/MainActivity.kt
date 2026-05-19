@@ -2,12 +2,9 @@ package com.qualcomm.rag
 
 import android.net.Uri
 import android.os.Bundle
-import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts.OpenDocument
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
+import java.io.File
 
 class MainActivity : ComponentActivity() {
 
@@ -26,35 +25,22 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MaterialTheme {
-                RagScreen(vm = vm, onPickPdf = { uri -> vm.indexPdf(uri, fileName(uri)) })
+                RagScreen(vm = vm)
             }
         }
-    }
-
-    // Get the human-readable file name from the URI
-    private fun fileName(uri: Uri): String {
-        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            val col = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (col >= 0 && cursor.moveToFirst()) return cursor.getString(col)
-        }
-        return "document.pdf"
     }
 }
 
 @Composable
-fun RagScreen(vm: MainViewModel, onPickPdf: (Uri) -> Unit) {
+fun RagScreen(vm: MainViewModel) {
 
     val status  by vm.status.collectAsState()
     val isBusy  by vm.isBusy.collectAsState()
     val isReady by vm.isReady.collectAsState()
     val results by vm.results.collectAsState()
 
-    var query by remember { mutableStateOf("") }
-
-    // File picker — opens the system file browser for PDFs
-    val picker = rememberLauncherForActivityResult(OpenDocument()) { uri ->
-        if (uri != null) onPickPdf(uri)
-    }
+    var pdfPath by remember { mutableStateOf("") }
+    var query   by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -64,19 +50,33 @@ fun RagScreen(vm: MainViewModel, onPickPdf: (Uri) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
 
-        // Pick a PDF (disabled while busy)
+        // User types the full path to the PDF file on the device
+        OutlinedTextField(
+            value         = pdfPath,
+            onValueChange = { pdfPath = it },
+            label         = { Text("PDF file path") },
+            placeholder   = { Text("/sdcard/Download/document.pdf") },
+            modifier      = Modifier.fillMaxWidth(),
+            singleLine    = true,
+            enabled       = !isBusy
+        )
+
+        // Load the PDF from the typed path
         Button(
-            onClick  = { picker.launch(arrayOf("application/pdf")) },
-            enabled  = !isBusy,
+            onClick  = {
+                val file = File(pdfPath.trim())
+                vm.indexPdf(file.toUri(), file.name)
+            },
+            enabled  = pdfPath.isNotBlank() && !isBusy,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(if (isBusy) "Please wait…" else "Pick PDF")
+            Text(if (isBusy) "Please wait…" else "Load PDF")
         }
 
-        // One line of status text telling the user what's happening
+        // One line showing what's happening
         Text(text = status, style = MaterialTheme.typography.bodyMedium)
 
-        // Show the search box only when a PDF is ready
+        // Search box — only shown once a PDF is indexed
         if (isReady) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
@@ -87,28 +87,23 @@ fun RagScreen(vm: MainViewModel, onPickPdf: (Uri) -> Unit) {
                     singleLine    = true
                 )
                 Button(
-                    onClick  = { vm.search(query) },
-                    enabled  = query.isNotBlank() && !isBusy
+                    onClick = { vm.search(query) },
+                    enabled = query.isNotBlank() && !isBusy
                 ) {
                     Text("Search")
                 }
             }
 
-            // Results list
+            // Results
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 itemsIndexed(results) { index, result ->
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(12.dp)) {
-
-                            // Rank, page number, and similarity score
                             Text(
                                 text  = "#${index + 1}  ·  Page ${result.pageNumber}  ·  ${(result.score * 100).toInt()}% match",
                                 style = MaterialTheme.typography.labelMedium
                             )
-
                             Spacer(Modifier.height(4.dp))
-
-                            // The actual text chunk from the PDF
                             Text(
                                 text  = result.chunkText,
                                 style = MaterialTheme.typography.bodySmall

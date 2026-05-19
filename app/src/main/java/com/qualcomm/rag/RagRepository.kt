@@ -11,6 +11,8 @@ import com.qualcomm.rag.ml.PdfExtractor
 import com.qualcomm.rag.ml.TextChunker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.InputStream
 import java.security.MessageDigest
 
 class RagRepository(context: Context) {
@@ -67,10 +69,17 @@ class RagRepository(context: Context) {
     private suspend fun fileHash(uri: Uri, context: Context): String =
         withContext(Dispatchers.IO) {
             val digest = MessageDigest.getInstance("SHA-256")
-            context.contentResolver.openInputStream(uri)?.use { stream ->
+            openStream(uri, context)?.use { stream ->
                 val buf = ByteArray(8192); var n: Int
                 while (stream.read(buf).also { n = it } != -1) digest.update(buf, 0, n)
             }
             digest.digest().joinToString("") { "%02x".format(it) }.take(16)
         }
+
+    // Opens the file from either a file:// path or a content:// URI
+    private fun openStream(uri: Uri, context: Context): InputStream? =
+        if (uri.scheme == "file")
+            File(uri.path!!).inputStream()
+        else
+            context.contentResolver.openInputStream(uri)
 }

@@ -75,8 +75,12 @@ class XlmRoBertaTokenizer private constructor(
         }
         ids.add(EOS)
 
-        val inputIds      = LongArray(ids.size) { ids[it].toLong() }
-        val attentionMask = LongArray(ids.size) { 1L }
+        val inputIds      = LongArray(ids.size)
+        val attentionMask = LongArray(ids.size)
+        for (i in ids.indices) {
+            inputIds[i]      = ids[i].toLong()
+            attentionMask[i] = 1L
+        }
         return Pair(inputIds, attentionMask)
     }
 
@@ -85,8 +89,10 @@ class XlmRoBertaTokenizer private constructor(
         val n = word.length
         if (n == 0) return emptyList()
 
-        val dp   = FloatArray(n + 1) { Float.NEGATIVE_INFINITY }
-        val back = IntArray(n + 1) { -1 }
+        val dp   = FloatArray(n + 1)
+        val back = IntArray(n + 1)
+        for (i in dp.indices) dp[i] = Float.NEGATIVE_INFINITY
+        for (i in back.indices) back[i] = -1
         dp[0] = 0f
 
         for (end in 1..n) {
@@ -110,9 +116,11 @@ class XlmRoBertaTokenizer private constructor(
         val result = mutableListOf<Int>()
         var pos = n
         while (pos > 0) {
-            val start = back[pos].takeIf { it >= 0 } ?: break
+            val start = back[pos]
+            if (start < 0) break
             val token = word.substring(start, pos)
-            result.add(tokenToId[token] ?: UNK)
+            val id    = tokenToId[token]
+            result.add(if (id != null) id else UNK)
             pos = start
         }
         result.reverse()

@@ -56,9 +56,9 @@ class RagRepository(context: Context) {
     }
 
     suspend fun search(query: String, topK: Int = 5): List<SearchResult> {
-        val docId = currentDocId ?: return emptyList()
+        if (currentDocId == null) return emptyList()
         val embedding = embedder.embed(query)
-        return db.search(docId, embedding, topK)
+        return db.search(currentDocId!!, embedding, topK)
     }
 
     // SHA-256 of the file content, truncated to 16 hex chars — used as DB document ID

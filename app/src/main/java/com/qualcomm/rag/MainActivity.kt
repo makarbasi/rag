@@ -1,6 +1,5 @@
 package com.qualcomm.rag
 
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -24,11 +23,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(applicationContext)
         enableEdgeToEdge()
-        setContent {
-            MaterialTheme {
-                RagScreen(vm = vm)
-            }
-        }
+        setContent { MaterialTheme { RagScreen(vm) } }
     }
 }
 
@@ -50,8 +45,6 @@ fun RagScreen(vm: MainViewModel) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-
-        // User types the full path to the PDF file on the device
         OutlinedTextField(
             value         = pdfPath,
             onValueChange = { pdfPath = it },
@@ -62,22 +55,16 @@ fun RagScreen(vm: MainViewModel) {
             enabled       = !isBusy
         )
 
-        // Load the PDF from the typed path
         Button(
-            onClick  = {
-                val file = File(pdfPath.trim())
-                vm.indexPdf(file.toUri(), file.name)
-            },
+            onClick  = { val f = File(pdfPath.trim()); vm.indexPdf(f.toUri(), f.name) },
             enabled  = pdfPath.isNotBlank() && !isBusy,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(if (isBusy) "Please wait…" else "Load PDF")
         }
 
-        // One line showing what's happening
         Text(text = status, style = MaterialTheme.typography.bodyMedium)
 
-        // Search box — only shown once a PDF is indexed
         if (isReady) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
@@ -90,12 +77,9 @@ fun RagScreen(vm: MainViewModel) {
                 Button(
                     onClick = { vm.search(query) },
                     enabled = query.isNotBlank() && !isBusy
-                ) {
-                    Text("Search")
-                }
+                ) { Text("Search") }
             }
 
-            // Results
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 itemsIndexed(results) { index, result ->
                     Card(modifier = Modifier.fillMaxWidth()) {
@@ -105,10 +89,7 @@ fun RagScreen(vm: MainViewModel) {
                                 style = MaterialTheme.typography.labelMedium
                             )
                             Spacer(Modifier.height(4.dp))
-                            Text(
-                                text  = result.chunkText,
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                            Text(text = result.chunkText, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }

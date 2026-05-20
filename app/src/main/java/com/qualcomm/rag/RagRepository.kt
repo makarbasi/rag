@@ -20,10 +20,8 @@ class RagRepository(context: Context) {
     val embedder = BgeM3Embedder(context)
     private val db = VectorStore(context)
 
-    // ID of the currently indexed document (null = nothing indexed yet)
     private var currentDocId: String? = null
 
-    // Index a PDF. Always clears the previous document first.
     suspend fun indexDocument(
         uri: Uri,
         name: String,
@@ -33,8 +31,7 @@ class RagRepository(context: Context) {
 
         val docId = fileHash(uri, context)
 
-        // Delete whatever was indexed before
-        currentDocId?.let { db.deleteDocument(it) }
+        if (currentDocId != null) db.deleteDocument(currentDocId!!)
         currentDocId = docId
 
         onStatus("Reading PDF pages…")
@@ -42,14 +39,14 @@ class RagRepository(context: Context) {
         val chunks = TextChunker.chunk(pages)
 
         val records = mutableListOf<ChunkRecord>()
-        chunks.forEachIndexed { i, chunk ->
+        for (i in chunks.indices) {
             onStatus("Embedding chunk ${i + 1} / ${chunks.size}…")
-            val embedding = embedder.embed(chunk.text)
+            val embedding = embedder.embed(chunks[i].text)
             records += ChunkRecord(
                 documentId   = docId,
                 documentName = name,
-                pageNumber   = chunk.pageNumber,
-                chunkText    = chunk.text,
+                pageNumber   = chunks[i].pageNumber,
+                chunkText    = chunks[i].text,
                 embedding    = floatArrayToByteArray(embedding)
             )
         }
@@ -58,25 +55,33 @@ class RagRepository(context: Context) {
         db.insertChunks(records)
     }
 
-    // Search the current document. Returns empty list if nothing indexed yet.
     suspend fun search(query: String, topK: Int = 5): List<SearchResult> {
         val docId = currentDocId ?: return emptyList()
         val embedding = embedder.embed(query)
         return db.search(docId, embedding, topK)
     }
 
-    // Makes a short unique ID from the file content so we can find it in the DB later
+    // SHA-256 of the file content, truncated to 16 hex chars — used as DB document ID
     private suspend fun fileHash(uri: Uri, context: Context): String =
         withContext(Dispatchers.IO) {
             val digest = MessageDigest.getInstance("SHA-256")
-            openStream(uri, context)?.use { stream ->
-                val buf = ByteArray(8192); var n: Int
-                while (stream.read(buf).also { n = it } != -1) digest.update(buf, 0, n)
+            val stream = openStream(uri, context)
+            if (stream != null) {
+                val buf = ByteArray(8192)
+                stream.use { s ->
+                    var n = s.read(buf)
+                    while (n != -1) {
+                        digest.update(buf, 0, n)
+                        n = s.read(buf)
+                    }
+                }
             }
-            digest.digest().joinToString("") { "%02x".format(it) }.take(16)
+            val bytes = digest.digest()
+            val sb = StringBuilder()
+            for (b in bytes) sb.append("%02x".format(b))
+            sb.toString().take(16)
         }
 
-    // Opens the file from either a file:// path or a content:// URI
     private fun openStream(uri: Uri, context: Context): InputStream? =
         if (uri.scheme == "file")
             File(uri.path!!).inputStream()

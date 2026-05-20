@@ -7,17 +7,8 @@ import java.io.InputStream
 import java.io.InputStreamReader
 import java.text.Normalizer
 
-/**
- * Pure Kotlin SentencePiece **Unigram** tokenizer for BGE-M3 (XLM-RoBERTa).
- *
- * tokenizer.json stores vocab as an array of [token, log_score] pairs where
- * the array index IS the token ID.  Tokenisation uses the Viterbi algorithm
- * to find the maximum-log-probability segmentation.
- *
- * Pipeline:  NFKC normalise → Metaspace split (prepend ▁) → Viterbi → BOS/EOS
- *
- * Zero native libraries required.
- */
+// Pure-Kotlin SentencePiece Unigram tokenizer for BGE-M3 (XLM-RoBERTa).
+// Uses Viterbi over the vocab from tokenizer.json (index = token ID).
 class XlmRoBertaTokenizer private constructor(
     private val tokenToId   : HashMap<String, Int>,
     private val tokenToScore: HashMap<String, Float>,
@@ -43,8 +34,6 @@ class XlmRoBertaTokenizer private constructor(
                             while (r.hasNext()) {
                                 when (r.nextName()) {
                                     "vocab" -> {
-                                        // [ [token, score], [token, score], … ]
-                                        // index in the array = token ID
                                         r.beginArray(); var id = 0
                                         while (r.hasNext()) {
                                             r.beginArray()
@@ -70,10 +59,7 @@ class XlmRoBertaTokenizer private constructor(
             }
     }
 
-    /**
-     * Encode [text] → (input_ids, attention_mask) as LongArrays.
-     * Automatically truncates to [maxLength] tokens and adds BOS/EOS.
-     */
+    // Encode text → (input_ids, attention_mask). Truncates to maxLength, adds BOS/EOS.
     fun encode(text: String): Pair<LongArray, LongArray> {
         val normalised = Normalizer.normalize(text.trim(), Normalizer.Form.NFKC)
         val words = normalised.split(Regex("\\s+")).filter { it.isNotEmpty() }
@@ -94,10 +80,7 @@ class XlmRoBertaTokenizer private constructor(
         return Pair(inputIds, attentionMask)
     }
 
-    /**
-     * Viterbi segmentation of [word] into vocab tokens.
-     * dp[i] = best cumulative log-probability for text[0..i].
-     */
+    // Viterbi segmentation: dp[i] = best cumulative log-prob for text[0..i]
     private fun viterbi(word: String): List<Int> {
         val n = word.length
         if (n == 0) return emptyList()
@@ -107,7 +90,6 @@ class XlmRoBertaTokenizer private constructor(
         dp[0] = 0f
 
         for (end in 1..n) {
-            // Try every token that could end at position `end`
             val startMin = (end - maxTokenLen).coerceAtLeast(0)
             for (start in startMin until end) {
                 if (dp[start] == Float.NEGATIVE_INFINITY) continue
@@ -118,7 +100,6 @@ class XlmRoBertaTokenizer private constructor(
                     if (total > dp[end]) { dp[end] = total; back[end] = start }
                 }
             }
-            // Byte-level fallback: treat each unmapped position as UNK
             if (dp[end] == Float.NEGATIVE_INFINITY) {
                 dp[end] = dp[end - 1] + UNK_SCORE
                 back[end] = end - 1
